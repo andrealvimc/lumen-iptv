@@ -11,10 +11,12 @@ actor ImagePipeline {
         let config = URLSessionConfiguration.default
         config.urlCache = URLCache(memoryCapacity: 32 << 20, diskCapacity: 600 << 20)
         config.requestCachePolicy = .returnCacheDataElseLoad
-        config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForRequest = 8
         config.httpMaximumConnectionsPerHost = 16
         return URLSession(configuration: config)
     }()
+    /// Hosts that time out on this network (some Brazilian ISPs/carriers block TMDB); served via proxy instead.
+    private var blockedHosts: Set<String> = []
 
     init() { memory.totalCostLimit = 120 << 20 }
 
@@ -23,9 +25,22 @@ actor ImagePipeline {
         if let img = memory.object(forKey: key as NSString) { return img }
         if let task = inflight[key] { return await task.value }
         let remote = Self.optimized(url, maxPixel: maxPixel)
+        let host = remote.host() ?? ""
+        let viaProxy = blockedHosts.contains(host)
         // Detached so network + decode run in parallel instead of serialising on this actor.
         let task = Task.detached(priority: .userInitiated) { [session] () -> UIImage? in
-            guard let (data, _) = try? await session.data(from: remote) else { return nil }
+            if !viaProxy {
+                do {
+                    let (data, _) = try await session.data(from: remote)
+                    return Self.downsample(data, maxPixel: maxPixel)
+                } catch let error as URLError where Self.isUnreachable(error) {
+                    await ImagePipeline.shared.markBlocked(host)
+                } catch {
+                    return nil
+                }
+            }
+            guard let proxied = Self.proxy(remote, maxPixel: maxPixel),
+                  let (data, _) = try? await session.data(from: proxied) else { return nil }
             return Self.downsample(data, maxPixel: maxPixel)
         }
         inflight[key] = task
@@ -46,6 +61,19 @@ actor ImagePipeline {
         let size = maxPixel <= 200 ? "w185" : maxPixel <= 400 ? "w342" : maxPixel <= 800 ? "w780" : "w1280"
         if let r = s.range(of: #"/t/p/[^/]+/"#, options: .regularExpression) { s.replaceSubrange(r, with: "/t/p/\(size)/") }
         return URL(string: s) ?? url
+    }
+
+    private func markBlocked(_ host: String) { blockedHosts.insert(host) }
+
+    nonisolated private static func isUnreachable(_ e: URLError) -> Bool {
+        [.timedOut, .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .secureConnectionFailed, .dnsLookupFailed].contains(e.code)
+    }
+
+    /// wsrv.nl fetches and resizes the image from its own network.
+    nonisolated private static func proxy(_ url: URL, maxPixel: CGFloat) -> URL? {
+        var c = URLComponents(string: "https://wsrv.nl/")
+        c?.queryItems = [.init(name: "url", value: url.absoluteString), .init(name: "w", value: "\(Int(maxPixel))"), .init(name: "we", value: "1")]
+        return c?.url
     }
 
     func prefetch(_ urls: [URL], maxPixel: CGFloat) {

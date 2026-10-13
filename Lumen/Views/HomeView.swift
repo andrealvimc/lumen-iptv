@@ -117,6 +117,7 @@ struct HeroCarousel: View {
                     ForEach(Array(shows.enumerated()), id: \.element.id) { i, show in
                         HeroPage(show: show)
                             .frame(width: w)
+                            .clipped()
                             .id(i)
                     }
                 }
@@ -137,11 +138,11 @@ struct HeroCarousel: View {
             }
         }
         .frame(height: 560)
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(7))
-                withAnimation(.easeInOut(duration: 0.6)) { page = ((page ?? 0) + 1) % max(shows.count, 1) }
-            }
+        .task(id: page) {
+            // Restarts whenever the page changes, so a manual swipe gets a full 7s too.
+            try? await Task.sleep(for: .seconds(7))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.6)) { page = ((page ?? 0) + 1) % max(shows.count, 1) }
         }
     }
 }
@@ -153,8 +154,15 @@ struct HeroPage: View {
     var body: some View {
         NavigationLink(value: show) {
             ZStack(alignment: .bottom) {
-                RemoteImage(url: show.backdrop ?? show.cover, maxPixel: 1400)
+                // Image lives in an overlay so its fill size can never widen the page.
+                Color.black
                     .frame(height: 560)
+                    .overlay {
+                        RemoteImage(url: show.backdrop ?? show.cover, maxPixel: 1400)
+                            .scrollTransition(axis: .horizontal) { content, phase in
+                                content.offset(x: phase.value * -90)
+                            }
+                    }
                     .clipped()
                     .overlay {
                         LinearGradient(stops: [
