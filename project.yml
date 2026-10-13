@@ -1,0 +1,29 @@
+name: Lumen
+options:
+  bundleIdPrefix: com.andrealvim
+  deploymentTarget:
+    iOS: "18.0"
+packages:
+  VLCKitSPM:
+    url: https://github.com/tylerjonesio/vlckit-spm
+    exactVersion: 3.6.0
+targets:
+  Lumen:
+    type: application
+    platform: iOS
+    sources: [Lumen]
+    dependencies:
+      - package: VLCKitSPM
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.andrealvim.lumen
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_BITCODE: NO
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Lumen/Resources/Info.plist
