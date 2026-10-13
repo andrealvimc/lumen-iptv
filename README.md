@@ -76,6 +76,14 @@ Then sign in with your provider's server URL, username and password.
 
 > With a free Apple ID the app expires after 7 days; just run it again from Xcode.
 
+### Without Xcode device support (Sideloadly / AltStore)
+
+```bash
+./scripts/make-ipa.sh          # writes ~/Desktop/Lumen.ipa
+```
+
+Drag the `.ipa` into Sideloadly, enter your Apple ID and press Start.
+
 ## Project layout
 
 ```
